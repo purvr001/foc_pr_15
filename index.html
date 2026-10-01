@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spam Email Detection AI</title>
+<style>
+:root{--bg:#eef2f7;--card:#ffffff;--ink:#14213d;--mute:#5b6b85;--line:#d9e1ec;--accent:#2d5bff;--spam:#e5384f;--ham:#1f9d6b;--warn:#f0a020}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1424;--card:#171f35;--ink:#e8edf8;--mute:#93a1bd;--line:#2a3555;--accent:#6b8bff;--spam:#ff5d73;--ham:#3ccf92;--warn:#ffc04d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;line-height:1.5}
+.wrap{max-width:920px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:1.9rem;margin:0 0 4px;letter-spacing:-.02em}
+.sub{color:var(--mute);margin:0 0 22px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.tab{border:1px solid var(--line);background:var(--card);color:var(--mute);padding:9px 18px;border-radius:999px;cursor:pointer;font-size:.95rem;font-weight:600}
+.tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tab:focus-visible,button:focus-visible,textarea:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.panel{display:none}
+.panel.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:16px}
+textarea{width:100%;min-height:190px;resize:vertical;border:1px solid var(--line);border-radius:12px;padding:14px;background:var(--bg);color:var(--ink);font:inherit}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+button.btn{border:0;border-radius:999px;padding:10px 20px;font-weight:700;cursor:pointer;background:var(--accent);color:#fff;font-size:.95rem}
+button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.gauge{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.ring{--p:0;width:140px;height:140px;border-radius:50%;background:conic-gradient(var(--c,var(--accent)) calc(var(--p)*1%),var(--line) 0);display:grid;place-items:center;transition:background .4s}
+.ring div{width:104px;height:104px;border-radius:50%;background:var(--card);display:grid;place-items:center;text-align:center}
+.ring b{font-size:1.6rem;display:block;line-height:1}
+.ring span{font-size:.75rem;color:var(--mute)}
+.verdict{font-size:1.5rem;font-weight:800;margin:0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.chip{padding:5px 12px;border-radius:999px;font-size:.82rem;font-weight:600;border:1px solid var(--line)}
+.chip.s{background:color-mix(in srgb,var(--spam) 15%,transparent);color:var(--spam);border-color:transparent}
+.chip.h{background:color-mix(in srgb,var(--ham) 15%,transparent);color:var(--ham);border-color:transparent}
+.chip.w{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn);border-color:transparent}
+.bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden;margin:6px 0 14px}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--accent)}
+.hl mark{background:color-mix(in srgb,var(--spam) 28%,transparent);color:inherit;border-radius:4px;padding:0 2px}
+.hl{white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radius:12px;padding:14px;border:1px solid var(--line)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.stat{background:var(--bg);border-radius:12px;padding:14px;text-align:center}
+.stat b{font-size:1.5rem;display:block}
+.stat span{color:var(--mute);font-size:.82rem}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}
+td.sp{color:var(--spam);font-weight:700}
+td.hm{color:var(--ham);font-weight:700}
+.hist{max-height:320px;overflow:auto}
+.small{color:var(--mute);font-size:.85rem}
+.sample{cursor:pointer}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Spam Email Detection AI</h1>
+<p class="sub">Naive Bayes classifier plus rule signals. Runs fully in your browser.</p>
+
+<div class="tabs" role="tablist">
+<button class="tab on" data-t="scan">Scan</button>
+<button class="tab" data-t="batch">Batch</button>
+<button class="tab" data-t="train">Train</button>
+<button class="tab" data-t="model">Model</button>
+<button class="tab" data-t="hist">History</button>
+</div>
+
+<section class="panel on" id="scan">
+<div class="card">
+<textarea id="mail" placeholder="Paste the email subject and body here"></textarea>
+<div class="row">
+<button class="btn" id="go">Analyze</button>
+<button class="btn ghost" id="clr">Clear</button>
+<button class="btn ghost sample" data-s="0">Try spam sample</button>
+<button class="btn ghost sample" data-s="1">Try safe sample</button>
+</div>
+</div>
+<div class="card" id="res" style="display:none">
+<div class="gauge">
+<div class="ring" id="ring"><div><p style="margin:0"><b id="pct">0%</b><span>spam score</span></p></div></div>
+<div style="flex:1;min-width:220px">
+<p class="verdict" id="vd"></p>
+<div class="small" id="conf"></div>
+<div class="chips" id="chips"></div>
+</div>
+</div>
+</div>
+<div class="card" id="bk" style="display:none">
+<div class="small">Naive Bayes</div><div class="bar"><i id="b1"></i></div>
+<div class="small">Rule signals</div><div class="bar"><i id="b2"></i></div>
+<div class="small" style="margin-bottom:8px">Flagged words in your email</div>
+<div class="hl" id="hl"></div>
+</div>
+</section>
+
+<section class="panel" id="batch">
+<div class="card">
+<p class="small" style="margin-top:0">Paste several emails. Separate them with a line containing only ---</p>
+<textarea id="bt" placeholder="Email one&#10;---&#10;Email two"></textarea>
+<div class="row"><button class="btn" id="bgo">Analyze all</button></div>
+</div>
+<div class="card" id="bres" style="display:none">
+<div class="hist"><table><thead><tr><th>#</th><th>Preview</th><th>Score</th><th>Verdict</th></tr></thead><tbody id="btb"></tbody></table></div>
+</div>
+</section>
+
+<section class="panel" id="train">
+<div class="card">
+<p class="small" style="margin-top:0">Add your own labeled examples. The model updates instantly and saves in this browser.</p>
+<textarea id="tx" placeholder="Paste an email to teach the model"></textarea>
+<div class="row">
+<button class="btn" id="ts" style="background:var(--spam)">Add as spam</button>
+<button class="btn" id="th" style="background:var(--ham)">Add as safe</button>
+<button class="btn ghost" id="rs">Reset model</button>
+</div>
+<p class="small" id="tmsg"></p>
+</div>
+</section>
+
+<section class="panel" id="model">
+<div class="card"><div class="stats" id="st"></div></div>
+<div class="card"><b>Top spam words</b><div class="chips" id="tsw"></div></div>
+<div class="card"><b>Top safe words</b><div class="chips" id="thw"></div></div>
+</section>
+
+<section class="panel" id="hist">
+<div class="card">
+<div class="row" style="margin:0 0 10px"><button class="btn ghost" id="hc">Clear history</button></div>
+<div class="hist"><table><thead><tr><th>Time</th><th>Preview</th><th>Score</th><th>Verdict</th></tr></thead><tbody id="htb"></tbody></table></div>
+</div>
+</section>
+</div>
+
+<script>
+const SPAM=[
+"WINNER! You have been selected to receive a $1000 gift card. Click here now to claim your free prize",
+"Congratulations you won the lottery. Send your bank details to claim 5,000,000 dollars immediately",
+"URGENT: Your account has been suspended. Verify your password now at http://secure-login.xyz",
+"Buy cheap viagra and cialis online no prescription needed. Limited time offer, order now",
+"Make money fast working from home. Earn $5000 per week guaranteed. No experience required",
+"Free entry in our weekly prize draw. Text WIN to 80085 now. Claim your reward today",
+"Dear customer your PayPal account is limited. Confirm your identity immediately or it will be closed",
+"Get a loan approved in minutes with bad credit. 0% interest. Apply now, act fast",
+"Exclusive deal! 90% off luxury watches. Click the link below, hurry while stock lasts",
+"You are a lucky winner of an iPhone 15. Claim now by entering your credit card number",
+"Increase your followers and earn bitcoin investment returns of 300% guaranteed risk free",
+"Hot singles in your area want to meet you. Click here for free registration",
+"Your package could not be delivered. Pay the small fee at this link to reschedule delivery",
+"Final notice: you owe back taxes. Pay immediately by gift card to avoid arrest",
+"Lose 20 pounds in 2 weeks with this miracle pill. Order now free trial offer",
+"Nigerian prince needs your help to transfer 10 million dollars. You will receive 30 percent commission",
+"Act now! Limited offer. Cheap meds, no prescription. Unsubscribe not available",
+"Your Netflix subscription expired. Update payment details now to avoid cancellation http://netflix-billing.top",
+"Earn passive income with crypto trading bot. Double your money in 24 hours guaranteed",
+"CONGRATULATIONS!!! You have been chosen for a free cruise vacation. Call now to claim",
+"Work from home and get paid daily. Click to join, no fees, 100% free money",
+"Security alert: unusual sign-in detected. Click this link and enter your password to secure your account",
+"Cash advance approved. Get $2000 deposited today. No credit check required",
+"Special promotion just for you: free gift, discount coupon, buy one get one free, click now",
+"Dear beneficiary, your inheritance funds are ready. Reply with your full name and account number"
+];
+const HAM=[
+"Hi team, the meeting is rescheduled to 3pm tomorrow in the main conference room. Please bring the project report",
+"Thanks for your email. I have attached the invoice for last month. Let me know if you have questions",
+"Can we catch up for lunch on Friday? I'm free after noon. Let me know what works for you",
+"Please find the updated project timeline attached. I will review the changes with the developers on Monday",
+"Reminder: your dentist appointment is on Tuesday at 10am. Reply to confirm or reschedule",
+"Hey, did you see the game last night? Let's talk about it when you get to the office",
+"The quarterly review notes are in the shared drive. Please add your comments before Thursday",
+"Mom says dinner is at 7 on Sunday. Can you pick up some bread on your way home",
+"Your order has shipped and will arrive on Wednesday. You can track it in your account dashboard",
+"Attached is my resume and cover letter for the web developer position. Thank you for your consideration",
+"Assignment submission deadline has been extended to next Monday. Please upload your code to the portal",
+"Great job on the presentation today. The client was really happy with the demo",
+"Could you review my pull request when you have a moment? I fixed the layout bug on the homepage",
+"Happy birthday! Hope you have a wonderful day. Let's celebrate this weekend",
+"The class notes from today's lecture on JavaScript are posted on the course page",
+"I'll be out of office next week. Please contact Priya for anything urgent regarding the website",
+"Here is the agenda for tomorrow's standup. Let me know if you want to add any topics",
+"Thanks for the feedback on my portfolio. I updated the projects section and fixed the responsive issues",
+"Your monthly statement is available. Log in to the official app to view your transactions",
+"Let's schedule a call to discuss the freelance project requirements and the delivery timeline",
+"Please confirm your attendance at the workshop on Saturday. Lunch will be provided",
+"The server maintenance is complete and all services are running normally again",
+"Sorry I missed your call. I was in a meeting. I'll call you back this evening",
+"Here are the photos from our trip. I uploaded them to the family album",
+"Can you send me the latest version of the design mockups. I want to share them with the developer"
+];
+const STOP=new Set("a an the and or but if of to in on at by for with is are was were be been am it its this that these those i you he she we they me my your our their as from so do does did have has had not no will would can could should just than then there here what which who when where how about into over out up down also very".split(" "));
+const KEY="spamAI_model_v1";
+const WORDS=["free","win","winner","prize","claim","urgent","click","now","offer","cash","credit","bank","password","verify","account","suspended","limited","guaranteed","bitcoin","crypto","loan","viagra","lottery","congratulations","gift","bonus","discount","cheap","earn","money","investment","unsubscribe","act","immediately","risk","pills","casino","inheritance","beneficiary","refund","paypal","dollars"];
+let M;
+function tok(t){return (t.toLowerCase().replace(/https?:\/\/\S+/g," urltoken ").replace(/\$\s?\d[\d,\.]*/g," moneytoken ").replace(/[^a-z0-9\s]/g," ").match(/[a-z0-9]+/g)||[]).filter(w=>w.length>1&&!STOP.has(w))}
+function fresh(){return{s:{},h:{},ns:0,nh:0,ts:0,th:0}}
+function learn(m,text,lab){const k=lab?"s":"h";const seen=tok(text);seen.forEach(w=>{m[k][w]=(m[k][w]||0)+1;lab?m.ts++:m.th++});lab?m.ns++:m.nh++}
+function build(){const m=fresh();SPAM.forEach(t=>learn(m,t,1));HAM.forEach(t=>learn(m,t,0));return m}
+function load(){try{const r=localStorage.getItem(KEY);if(r){const m=JSON.parse(r);if(m&&m.s)return m}}catch(e){}return build()}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(M))}catch(e){}}
+M=load();
+function nb(text){
+const ws=tok(text);if(!ws.length)return{p:.5,det:[]};
+const V=new Set([...Object.keys(M.s),...Object.keys(M.h)]).size||1;
+let ls=Math.log((M.ns+1)/(M.ns+M.nh+2)),lh=Math.log((M.nh+1)/(M.ns+M.nh+2));
+const det=[];
+ws.forEach(w=>{
+const ps=((M.s[w]||0)+1)/(M.ts+V),ph=((M.h[w]||0)+1)/(M.th+V);
+ls+=Math.log(ps);lh+=Math.log(ph);
+const r=ps/(ps+ph);if(r>.68&&(M.s[w]||0)>0)det.push({w,r});
+});
+const d=Math.max(-40,Math.min(40,ls-lh));
+return{p:1/(1+Math.exp(-d)),det}
+}
+function rules(text){
+const f=[];let score=0;
+const letters=text.replace(/[^a-zA-Z]/g,"");
+const caps=letters.length?text.replace(/[^A-Z]/g,"").length/letters.length:0;
+if(caps>.35&&letters.length>20){f.push(["Excessive capital letters",.18]);}
+const ex=(text.match(/!/g)||[]).length;
+if(ex>=3)f.push(["Many exclamation marks",.12]);
+const urls=text.match(/https?:\/\/\S+/gi)||[];
+if(urls.length){f.push([urls.length>2?"Multiple links":"Contains link",urls.length>2?.2:.1]);}
+if(urls.some(u=>/\.(xyz|top|click|work|loan|gq|tk|ml|cf)\b/i.test(u)||/\d+\.\d+\.\d+\.\d+/.test(u)||/(secure|verify|login|billing|account)/i.test(u)))f.push(["Suspicious link",.3]);
+if(/\$\s?\d|\b\d[\d,]*\s?(dollars|usd|inr|rs)\b/i.test(text))f.push(["Money amount mentioned",.1]);
+if(/\b(urgent|immediately|act now|final notice|hurry|expires|last chance|within 24 hours)\b/i.test(text))f.push(["Urgency pressure",.2]);
+if(/\b(password|credit card|ssn|pin|otp|bank details|account number|cvv)\b/i.test(text))f.push(["Asks for sensitive info",.28]);
+if(/\b(winner|won|prize|lottery|congratulations|selected|claim)\b/i.test(text))f.push(["Prize or reward claim",.22]);
+if(/\b(gift card|wire transfer|bitcoin|western union)\b/i.test(text))f.push(["Untraceable payment",.25]);
+if(/\b(free|100% free|no cost|risk free|guaranteed)\b/i.test(text))f.push(["Too-good-to-be-true wording",.12]);
+if(/dear (customer|user|beneficiary|friend|sir|madam|account holder)/i.test(text))f.push(["Generic greeting",.1]);
+if(/\b(unsubscribe|opt.?out)\b/i.test(text)&&urls.length)f.push(["Bulk mail footer",.05]);
+f.forEach(x=>score+=x[1]);
+return{score:Math.min(1,score),flags:f}
+}
+function analyze(text){
+const a=nb(text),r=rules(text);
+let p=a.p*.7+r.score*.3;
+if(r.score>=.6)p=Math.max(p,.8);
+if(a.p<.15&&r.score<.2)p=Math.min(p,.15);
+p=Math.max(0,Math.min(1,p));
+return{p,nb:a.p,rule:r.score,flags:r.flags,words:a.det}
+}
+function verdict(p){return p>=.7?["Spam","var(--spam)"]:p>=.4?["Suspicious","var(--warn)"]:["Looks safe","var(--ham)"]}
+const $=id=>document.getElementById(id);
+function esc(s){return s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function highlight(text,words){
+const set=new Set(words.map(x=>x.w).concat(WORDS.filter(w=>new RegExp("\\b"+w+"\\b","i").test(text))));
+return esc(text).replace(/[A-Za-z0-9']+/g,w=>set.has(w.toLowerCase())?"<mark>"+w+"</mark>":w)
+}
+function addHist(text,res){
+let h=[];try{h=JSON.parse(localStorage.getItem("spamAI_hist")||"[]")}catch(e){}
+h.unshift({t:Date.now(),x:text.slice(0,70),p:res.p});
+h=h.slice(0,50);
+try{localStorage.setItem("spamAI_hist",JSON.stringify(h))}catch(e){}
+}
+function renderHist(){
+let h=[];try{h=JSON.parse(localStorage.getItem("spamAI_hist")||"[]")}catch(e){}
+$("htb").innerHTML=h.length?h.map(i=>{const v=verdict(i.p);return"<tr><td>"+new Date(i.t).toLocaleString()+"</td><td>"+esc(i.x)+"</td><td>"+Math.round(i.p*100)+"%</td><td class='"+(i.p>=.7?"sp":i.p<.4?"hm":"")+"'>"+v[0]+"</td></tr>"}).join(""):"<tr><td colspan='4' class='small'>No scans yet. Analyze an email to see it here.</td></tr>"
+}
+function scan(){
+const t=$("mail").value.trim();
+if(!t){$("mail").focus();return}
+const r=analyze(t),v=verdict(r.p),pc=Math.round(r.p*100);
+$("res").style.display="block";$("bk").style.display="block";
+$("ring").style.setProperty("--p",pc);$("ring").style.setProperty("--c",v[1]);
+$("pct").textContent=pc+"%";
+$("vd").textContent=v[0];$("vd").style.color=v[1];
+const conf=Math.abs(r.p-.5)*2;
+$("conf").textContent="Confidence: "+(conf>.7?"High":conf>.4?"Medium":"Low");
+let c="";
+r.flags.forEach(f=>c+="<span class='chip w'>"+f[0]+"</span>");
+r.words.sort((a,b)=>b.r-a.r).slice(0,6).forEach(w=>c+="<span class='chip s'>"+esc(w.w)+"</span>");
+if(!c)c="<span class='chip h'>No warning signs found</span>";
+$("chips").innerHTML=c;
+$("b1").style.width=Math.round(r.nb*100)+"%";
+$("b2").style.width=Math.round(r.rule*100)+"%";
+$("hl").innerHTML=highlight(t,r.words);
+addHist(t,r);renderHist();
+}
+function batch(){
+const parts=$("bt").value.split(/^\s*---\s*$/m).map(s=>s.trim()).filter(Boolean);
+if(!parts.length)return;
+$("bres").style.display="block";
+$("btb").innerHTML=parts.map((t,i)=>{const r=analyze(t),v=verdict(r.p);return"<tr><td>"+(i+1)+"</td><td>"+esc(t.slice(0,70))+"</td><td>"+Math.round(r.p*100)+"%</td><td class='"+(r.p>=.7?"sp":r.p<.4?"hm":"")+"'>"+v[0]+"</td></tr>"}).join("");
+}
+function top(obj,other,n){
+return Object.keys(obj).filter(w=>obj[w]>=2&&obj[w]>(other[w]||0)*1.5).sort((a,b)=>obj[b]-obj[a]).slice(0,n)
+}
+function renderModel(){
+const V=new Set([...Object.keys(M.s),...Object.keys(M.h)]).size;
+$("st").innerHTML=[["Spam examples",M.ns],["Safe examples",M.nh],["Vocabulary",V],["Total",M.ns+M.nh]].map(x=>"<div class='stat'><b>"+x[1]+"</b><span>"+x[0]+"</span></div>").join("");
+$("tsw").innerHTML=top(M.s,M.h,18).map(w=>"<span class='chip s'>"+esc(w)+"</span>").join("")||"<span class='small'>Not enough data</span>";
+$("thw").innerHTML=top(M.h,M.s,18).map(w=>"<span class='chip h'>"+esc(w)+"</span>").join("")||"<span class='small'>Not enough data</span>";
+}
+function teach(lab){
+const t=$("tx").value.trim();
+if(!t){$("tx").focus();return}
+learn(M,t,lab);save();renderModel();
+$("tx").value="";
+$("tmsg").textContent="Added as "+(lab?"spam":"safe")+". Model now has "+(M.ns+M.nh)+" examples.";
+}
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{
+document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+document.querySelectorAll(".panel").forEach(x=>x.classList.remove("on"));
+b.classList.add("on");$(b.dataset.t).classList.add("on");
+if(b.dataset.t==="model")renderModel();
+if(b.dataset.t==="hist")renderHist();
+}));
+document.querySelectorAll(".sample").forEach(b=>b.addEventListener("click",()=>{
+$("mail").value=b.dataset.s==="0"?"URGENT!!! Congratulations, you are the WINNER of $5000 cash prize. Click http://claim-prize.xyz now and enter your bank details to claim your free reward immediately!":"Hi Purvraj, I reviewed your portfolio website. The layout looks good. Can we schedule a call on Friday to discuss the freelance project timeline?";
+scan();
+}));
+$("go").addEventListener("click",scan);
+$("clr").addEventListener("click",()=>{$("mail").value="";$("res").style.display="none";$("bk").style.display="none"});
+$("bgo").addEventListener("click",batch);
+$("ts").addEventListener("click",()=>teach(1));
+$("th").addEventListener("click",()=>teach(0));
+$("rs").addEventListener("click",()=>{M=build();save();renderModel();$("tmsg").textContent="Model reset to default training data."});
+$("hc").addEventListener("click",()=>{try{localStorage.removeItem("spamAI_hist")}catch(e){}renderHist()});
+$("mail").addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter")scan()});
+renderModel();renderHist();
+</script>
+</body>
+</html>
