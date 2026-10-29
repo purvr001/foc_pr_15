@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attendance Register</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef1f5; --surface:#ffffff; --ink:#1b2433; --muted:#667085; --line:#d9dfe8;
+  --present:#1f8a5b; --absent:#c8412f; --late:#c58a12; --accent:#2b4acb;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#12161d; --surface:#1b212b; --ink:#e8ecf3; --muted:#98a2b3; --line:#2b3340;
+  --present:#3cc08a; --absent:#ef6b57; --late:#e5b13f; --accent:#7f97ff; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5}
+.wrap{max-width:900px;margin:0 auto;padding:28px 18px 60px}
+h1{font-size:2.2rem;font-weight:800;margin:0 0 4px;letter-spacing:-.02em}
+.sub{color:var(--muted);margin:0 0 24px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+input,button,select{font:inherit;color:var(--ink)}
+input[type=date],input[type=text]{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 12px}
+button{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 14px}
+button:hover{border-color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.spacer{flex:1}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.stat b{display:block;font-size:1.7rem;line-height:1.1}
+.stat span{color:var(--muted);font-size:.9rem}
+.stat.p b{color:var(--present)} .stat.a b{color:var(--absent)} .stat.l b{color:var(--late)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:560px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted);font-size:.9rem}
+tr:last-child td{border-bottom:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:6px 12px;background:transparent;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on.P{background:var(--present);color:#fff}
+.seg button.on.A{background:var(--absent);color:#fff}
+.seg button.on.L{background:var(--late);color:#fff}
+.pct{font-variant-numeric:tabular-nums}
+.low{color:var(--absent);font-weight:600}
+.x{border:0;background:none;color:var(--muted);padding:4px 8px}
+.x:hover{color:var(--absent)}
+.empty{padding:30px;text-align:center;color:var(--muted)}
+@media (max-width:600px){.stats{grid-template-columns:repeat(2,1fr)} h1{font-size:1.7rem}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Attendance register</h1>
+  <p class="sub">Mark each student for a date. Records stay saved in this browser.</p>
+ 
+  <div class="bar">
+    <label>Date <input type="date" id="date"></label>
+    <button id="allP">Mark all present</button>
+    <span class="spacer"></span>
+    <button id="csv">Download CSV</button>
+  </div>
+ 
+  <div class="stats">
+    <div class="stat"><b id="sT">0</b><span>Students</span></div>
+    <div class="stat p"><b id="sP">0</b><span>Present</span></div>
+    <div class="stat a"><b id="sA">0</b><span>Absent</span></div>
+    <div class="stat l"><b id="sL">0</b><span>Late</span></div>
+  </div>
+ 
+  <div class="bar">
+    <input type="text" id="name" placeholder="Student name" aria-label="Student name">
+    <button class="primary" id="add">Add student</button>
+  </div>
+ 
+  <div class="card">
+    <table>
+      <thead><tr><th>Name</th><th>Status on this date</th><th>Overall attendance</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+ 
+<script>
+const KEY = "attendance-v1";
+let db = { students: [], records: {} }; // records[date][studentId] = 'P' | 'A' | 'L'
+ 
+try { const s = localStorage.getItem(KEY); if (s) db = JSON.parse(s); } catch (e) {}
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) {} }
+ 
+const $ = id => document.getElementById(id);
+const dateEl = $("date");
+dateEl.value = new Date().toISOString().slice(0,10);
+ 
+function status(id){ return (db.records[dateEl.value] || {})[id] || ""; }
+function setStatus(id, v){
+  const d = dateEl.value; if (!d) return;
+  (db.records[d] = db.records[d] || {})[id] = v;
+  save(); render();
+}
+function overall(id){
+  let held = 0, got = 0;
+  for (const d in db.records){
+    const v = db.records[d][id];
+    if (!v) continue;
+    held++; if (v === "P" || v === "L") got++;
+  }
+  return held ? Math.round(got / held * 100) : null;
+}
+function esc(t){ return t.replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+ 
+function render(){
+  const tb = $("rows");
+  if (!db.students.length){
+    tb.innerHTML = '<tr><td colspan="4" class="empty">No students yet. Add your first student above.</td></tr>';
+  } else {
+    tb.innerHTML = db.students.map(s => {
+      const st = status(s.id), p = overall(s.id);
+      const btn = (v, label) => `<button class="${v} ${st===v?"on":""}" data-id="${s.id}" data-v="${v}" aria-pressed="${st===v}">${label}</button>`;
+      return `<tr>
+        <td>${esc(s.name)}</td>
+        <td><div class="seg">${btn("P","Present")}${btn("A","Absent")}${btn("L","Late")}</div></td>
+        <td class="pct ${p!==null&&p<75?"low":""}">${p===null?"No records":p+"%"}</td>
+        <td><button class="x" data-del="${s.id}" aria-label="Remove ${esc(s.name)}">Remove</button></td>
+      </tr>`;
+    }).join("");
+  }
+  const c = { P:0, A:0, L:0 };
+  db.students.forEach(s => { const v = status(s.id); if (v) c[v]++; });
+  $("sT").textContent = db.students.length;
+  $("sP").textContent = c.P; $("sA").textContent = c.A; $("sL").textContent = c.L;
+}
+ 
+$("rows").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.v) setStatus(b.dataset.id, b.dataset.v);
+  if (b.dataset.del && confirm("Remove this student and their records?")){
+    const id = b.dataset.del;
+    db.students = db.students.filter(s => s.id !== id);
+    for (const d in db.records) delete db.records[d][id];
+    save(); render();
+  }
+});
+ 
+function addStudent(){
+  const n = $("name").value.trim(); if (!n) return;
+  db.students.push({ id: "s" + Date.now() + Math.floor(Math.random()*1000), name: n });
+  $("name").value = ""; save(); render(); $("name").focus();
+}
+$("add").onclick = addStudent;
+$("name").addEventListener("keydown", e => { if (e.key === "Enter") addStudent(); });
+ 
+$("allP").onclick = () => {
+  const d = dateEl.value; if (!d) return;
+  db.records[d] = db.records[d] || {};
+  db.students.forEach(s => db.records[d][s.id] = "P");
+  save(); render();
+};
+dateEl.addEventListener("change", render);
+ 
+$("csv").onclick = () => {
+  const dates = Object.keys(db.records).sort();
+  const rows = [["Name", ...dates, "Attendance %"]];
+  db.students.forEach(s => {
+    const p = overall(s.id);
+    rows.push([s.name, ...dates.map(d => db.records[d][s.id] || ""), p === null ? "" : p]);
+  });
+  const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = "attendance.csv"; a.click();
+};
+ 
+render();
+</script>
+</body>
+</html>
+ 
